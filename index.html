@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generatore Tabelle Influencer – v2</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- FontAwesome rimane per eventuali altre icone dell’interfaccia → non più indispensabile dentro la tabella -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        * {margin:0;padding:0;box-sizing:border-box;}
+
+        /* 1. Centratura verticale complessiva */
+        body {
+            font-family:'Inter','Avenir Next LT Pro',sans-serif;
+            background:linear-gradient(135deg,#f8f9fa 0%,#e9ecef 100%);
+            min-height:100vh;
+            display:flex;
+            flex-direction:column;
+            justify-content:center;        /* centra verticalmente l’intero contenitore */
+            color:#1d48b4;
+        }
+
+        .container {
+            max-width:1200px;
+            margin:0 auto;
+            padding:20px;
+        }
+
+        .header {
+            text-align:center;
+            margin-bottom:40px;
+            padding:30px;
+            background:linear-gradient(135deg,#1d48b4 0%,#2557c4 100%);
+            border-radius:15px;
+            color:white;
+            box-shadow:0 10px 30px rgba(29,72,180,.3);
+        }
+
+        .header h1{font-size:2.5rem;font-weight:700;margin-bottom:10px;text-shadow:0 2px 4px rgba(0,0,0,.1);}        
+        .header p{font-size:1.1rem;opacity:.9;font-weight:300;}
+
+        .upload-section{
+            background:white;
+            border-radius:15px;
+            padding:40px;
+            margin-bottom:30px;
+            box-shadow:0 5px 20px rgba(0,0,0,.08);
+            border:2px solid #e9ecef;
+            transition:all .3s ease;
+        }
+        .upload-section:hover{box-shadow:0 10px 35px rgba(29,72,180,.15);border-color:#1d48b4;}
+
+        .upload-area{border:3px dashed #1d48b4;border-radius:12px;padding:40px;text-align:center;background:linear-gradient(45deg,#f8f9ff 0%,#fff 100%);transition:all .3s ease;cursor:pointer;}
+        .upload-area:hover{background:linear-gradient(45deg,#f0f2ff 0%,#f8f9ff 100%);border-color:#2557c4;}
+        .upload-area.dragover{background:linear-gradient(45deg,#e8ebff 0%,#f0f2ff 100%);border-color:#ffd700;transform:scale(1.02);}        
+        .upload-icon{font-size:4rem;color:#1d48b4;margin-bottom:20px;}
+        .upload-text{font-size:1.3rem;color:#1d48b4;font-weight:600;margin-bottom:10px;}
+        .upload-subtext{font-size:1rem;color:#6c757d;font-weight:400;}
+        .file-input{display:none;}
+
+        .btn{background:linear-gradient(135deg,#1d48b4 0%,#2557c4 100%);color:white;border:none;padding:15px 30px;border-radius:8px;font-size:1.1rem;font-weight:600;cursor:pointer;transition:all .3s ease;box-shadow:0 4px 15px rgba(29,72,180,.3);margin:10px;position:relative;overflow:hidden;}
+        .btn:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(29,72,180,.4);background:linear-gradient(135deg,#2557c4 0%,#1d48b4 100%);}
+        .btn:active{transform:translateY(0);}        
+        .btn.loading{background:linear-gradient(135deg,#ffd700 0%,#ffed4e 100%);color:#1d48b4;}
+        .btn.success{background:linear-gradient(135deg,#28a745 0%,#34ce57 100%);color:white;}
+
+        .progress-bar{width:100%;height:6px;background:#e9ecef;border-radius:3px;margin:20px 0;overflow:hidden;display:none;}
+        .progress-fill{height:100%;background:linear-gradient(90deg,#1d48b4,#ffd700,#1d48b4);background-size:200% 100%;animation:progress 2s linear infinite;width:0%;transition:width .3s ease;}
+        @keyframes progress{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
+
+        .table-container{background:white;border-radius:15px;padding:30px;margin-top:30px;box-shadow:0 5px 20px rgba(0,0,0,.08);border:2px solid #e9ecef;display:none;}
+        .table-controls{text-align:center;margin-bottom:20px;}
+        .svg-container{width:100%;display:flex;justify-content:center;align-items:center;margin:20px 0;}
+        .download-section{text-align:center;margin-top:20px;padding-top:20px;border-top:2px solid #e9ecef;}
+
+        .status-message{padding:15px;border-radius:8px;margin:20px 0;font-weight:500;display:none;}
+        .status-success{background:#d4edda;color:#155724;border:1px solid #c3e6cb;}
+        .status-error{background:#f8d7da;color:#721c24;border:1px solid #f5c6cb;}
+
+        .footer{text-align:center;margin-top:50px;padding:20px;color:#6c757d;font-size:.9rem;}
+
+        @media(max-width:768px){
+            .container{padding:15px;}
+            .header h1{font-size:2rem;}
+            .upload-section,.table-container{padding:20px;}
+            .btn{padding:12px 25px;font-size:1rem;}
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Generatore Tabelle Influencer</h1>
+            <p>Trasforma i tuoi dati Excel in eleganti tabelle SVG</p>
+        </div>
+
+        <div class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">Trascina il file Excel qui</div>
+                <div class="upload-subtext">oppure clicca per selezionare</div>
+                <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls"/>
+            </div>
+
+            <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+            <div class="status-message" id="statusMessage"></div>
+
+            <div style="text-align:center;margin-top:20px;">
+                <button class="btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()">Seleziona File Excel</button>
+            </div>
+        </div>
+
+        <div class="table-container" id="tableContainer">
+            <div class="table-controls"><h2 style="color:#1d48b4;margin-bottom:20px;">📋 Anteprima Tabella</h2></div>
+            <div class="svg-container" id="svgContainer"><!-- SVG generata dinamicamente --></div>
+            <div class="download-section">
+                <button class="btn" id="downloadBtn" onclick="downloadPNG()">⬇️ Scarica Tabella PNG</button>
+                <button class="btn" style="background:linear-gradient(135deg,#ffd700 0%,#ffed4e 100%);color:#1d48b4;" onclick="generateNewTable()">🔄 Genera Nuova Tabella</button>
+            </div>
+        </div>
+
+        <div class="footer"><p>Applicazione web per la generazione di tabelle SVG da dati Excel</p></div>
+    </div>
+
+<script>
+// -------------------------------------------------------------
+//  Costanti per i loghi vettoriali (inline SVG → nessuna perdita nel PNG)
+//  Ogni path è pensato per viewBox 0 0 24 24
+// -------------------------------------------------------------
+const ICON_PATHS = {
+    facebook: 'M24 12.0733C24 5.40263 18.6274 0 12 0S0 5.40263 0 12.0733C0 18.0944 4.38846 23.0436 10.125 23.8549V15.4681H7.07813V12.0733H10.125V9.41315C10.125 6.38768 11.9188 4.75 14.6572 4.75C15.9703 4.75 17.3438 4.99043 17.3438 4.99043V7.9399H15.8094C14.2931 7.9399 13.875 8.81641 13.875 9.72215V12.0733H17.2031L16.633 15.4681H13.875V23.8549C19.6115 23.0436 24 18.0944 24 12.0733Z',
+    x: 'M12.6.75h2.454l-5.36 6.142L16 15.25h-4.937l-3.867-5.07-4.425 5.07H.316l5.733-6.57L0 .75h5.063l3.495 4.633L12.601.75ZM11.74 13.778h1.36L4.323 2.145H2.865z',
+    linkedin: 'M20.452 0H3.548A3.556 3.556 0 000 3.563V20.45A3.556 3.556 0 003.548 24h16.9A3.556 3.556 0 0024 20.437V3.563A3.556 3.556 0 0020.452 0zM7.119 20.453H3.561v-9.67h3.558v9.67zM5.34 9.144A2.062 2.062 0 113.279 7.08 2.061 2.061 0 015.34 9.144zm14.675 11.309h-3.555v-4.71c0-1.122-.02-2.595-1.582-2.595-1.583 0-1.826 1.235-1.826 2.51v4.795h-3.556v-9.67h3.414v1.322h.049a3.745 3.745 0 013.37-1.848c3.604 0 4.267 2.37 4.267 5.459v4.737z',
+    youtube: 'M19.615 3.184a2.474 2.474 0 00-1.748-1.75C16.313 1 12 1 12 1s-4.313 0-5.867.434a2.474 2.474 0 00-1.748 1.75C3 4.739 3 8.264 3 8.264s0 3.526.385 5.08a2.474 2.474 0 001.748 1.75C7.687 15.529 12 15.529 12 15.529s4.313 0 5.867-.434a2.474 2.474 0 001.748-1.75C21 11.79 21 8.264 21 8.264s0-3.526-.385-5.08zM9.545 11.245V5.284l4.909 2.981-4.909 2.98z',
+    other: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z'
+};
+
+// -------------------------------------------------------------
+//  Elementi DOM
+// -------------------------------------------------------------
+let currentData = null;
+let generatedSVG = null;
+
+const uploadArea       = document.getElementById('uploadArea');
+const fileInput        = document.getElementById('fileInput');
+const uploadBtn        = document.getElementById('uploadBtn');
+const progressBar      = document.getElementById('progressBar');
+const progressFill     = document.getElementById('progressFill');
+const statusMessage    = document.getElementById('statusMessage');
+const tableContainer   = document.getElementById('tableContainer');
+
+uploadArea.addEventListener('click', () => fileInput.click());
+uploadArea.addEventListener('dragover', handleDragOver);
+uploadArea.addEventListener('dragleave', handleDragLeave);
+uploadArea.addEventListener('drop', handleDrop);
+fileInput.addEventListener('change', handleFileSelect);
+
+function handleDragOver(e){e.preventDefault();uploadArea.classList.add('dragover');}
+function handleDragLeave(e){e.preventDefault();uploadArea.classList.remove('dragover');}
+function handleDrop(e){e.preventDefault();uploadArea.classList.remove('dragover');if(e.dataTransfer.files.length>0){processFile(e.dataTransfer.files[0]);}}
+function handleFileSelect(e){if(e.target.files[0]){processFile(e.target.files[0]);}}
+
+function showStatus(message,type){statusMessage.textContent=message;statusMessage.className=`status-message status-${type}`;statusMessage.style.display='block';setTimeout(()=>{statusMessage.style.display='none';},4000);}
+function updateButton(btn,text,className){btn.textContent=text;btn.className=`btn ${className}`;}
+function showProgress(){progressBar.style.display='block';progressFill.style.width='100%';}
+function hideProgress(){progressBar.style.display='none';progressFill.style.width='0%';}
+
+function processFile(file){
+    if(!file.name.match(/\.(xlsx|xls)$/)){showStatus('❌ Seleziona un file Excel (.xlsx o .xls)','error');return;}
+    updateButton(uploadBtn,'📤 Caricamento in corso...','loading');
+    showProgress();
+    const reader=new FileReader();
+    reader.onload=function(e){
+        try{
+            const workbook=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+            const worksheet=workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData=XLSX.utils.sheet_to_json(worksheet);
+            if(jsonData.length===0) throw new Error('Il file Excel è vuoto');
+            currentData=processExcelData(jsonData);
+            generateSVGTable(currentData);
+            updateButton(uploadBtn,'✅ File caricato!','success');
+            showStatus('✅ File Excel processato con successo!','success');
+            tableContainer.style.display='block';
+        }catch(err){console.error(err);showStatus(`❌ Errore: ${err.message}`,'error');updateButton(uploadBtn,'❌ Errore nel caricamento','error');}
+        finally{hideProgress();setTimeout(()=>updateButton(uploadBtn,'Seleziona File Excel',''),3000);}
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function processExcelData(data){
+    return data.map(row=>{
+        const influencer = row.Labels ? row.Labels.split(',')[0].trim() : '';
+        let channel='';
+        let channelIcon='other';
+        if(row.Autori){
+            const prefix=row.Autori.substring(0,2).toLowerCase();
+            switch(prefix){
+                case 'fb': channel='Facebook'; channelIcon='facebook'; break;
+                case 'tw': channel='X'; channelIcon='x'; break; // Twitter è ora X 🆕
+                case 'li': channel='LinkedIn'; channelIcon='linkedin'; break;
+                case 'yt': channel='YouTube'; channelIcon='youtube'; break;
+                default: channel='Social'; channelIcon='other';
+            }
+        }
+        const posts = row.Totale || 0;
+        const followers = row['Portata per risultato'] || 0;
+        return {influencer,channel,channelIcon,posts:formatNumber(posts),followers:formatNumber(followers)};
+    }).filter(r=>r.influencer);
+}
+
+function formatNumber(num){if(!num||num===0)return'0';const n=parseInt(num);if(n>=1e6){const m=n/1e6;return m>=10?`${Math.floor(m)}M`:`${m.toFixed(2).replace('.00','')}M`;}else if(n>=1e3){const k=n/1e3;return k>=10?`${Math.floor(k)}K`:`${k.toFixed(2).replace('.00','')}K`;}
+return n.toString();}
+
+// -------------------------------------------------------------
+//  Generazione SVG della tabella
+// -------------------------------------------------------------
+function generateSVGTable(data){
+    const width=800;
+    const height=1200;
+    const headerHeight=80;
+    const availableHeight=height-headerHeight;
+    const minRowHeight=60;
+    const rowHeight=data.length>0?Math.max(Math.floor(availableHeight/data.length),minRowHeight):100;
+
+    const cols=[
+        {title:'INFLUENCER',width:288},
+        {title:'CANALE',width:192},
+        {title:'POST',width:144},
+        {title:'FOLLOWERS',width:176}
+    ];
+
+    const baseFontSize=Math.min(Math.floor(rowHeight/2.4),28);
+    const headerFontSize=Math.min(Math.floor(headerHeight/3),28);
+
+    let svg=`<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <style>
+                .header-text{font-family:'Arial',sans-serif;font-size:${headerFontSize}px;font-weight:300;fill:#fff;text-anchor:middle;dominant-baseline:middle;}
+                .cell-text{font-family:'Arial',sans-serif;font-size:${baseFontSize}px;fill:#4d4c4c;text-anchor:middle;dominant-baseline:middle;}
+                .influencer-text{font-family:'Arial',sans-serif;font-size:${baseFontSize}px;font-weight:bold;fill:#1d48b4;text-anchor:middle;dominant-baseline:middle;}
+            </style>
+        </defs>`;
+
+    // bordo esterno
+    svg+=`<rect x="0" y="0" width="${width}" height="${height}" fill="none" stroke="#c9cbd1" stroke-width="2"/>`;
+
+    // header
+    let x=0;
+    cols.forEach(col=>{
+        svg+=`<rect x="${x}" y="0" width="${col.width}" height="${headerHeight}" fill="#1d48b4" stroke="#ffffff" stroke-width="2"/>`;
+        svg+=`<text x="${x+col.width/2}" y="${headerHeight/2}" class="header-text">${col.title}</text>`;
+        x+=col.width;
+    });
+
+    // funzione wrap testo
+    const wrapText=(text,maxWidth,fontSize)=>{
+        const words=text.split(' ');
+        const lines=[];let current='';
+        const charWidth=fontSize*0.55;
+        const maxChars=Math.floor((maxWidth-30)/charWidth);
+        words.forEach(word=>{
+            if((current+' '+word).trim().length<=maxChars){current+=(current?' ':'')+word;}else{if(current)lines.push(current);current=word;}
+        });
+        if(current)lines.push(current);
+        return lines;
+    };
+
+    // righe dati
+    data.forEach((row,i)=>{
+        const y=headerHeight+i*rowHeight;
+        const fill=i%2===0?'#ffffff':'#f8f9fa';
+        x=0;
+
+        // col 0 – influencer
+        svg+=`<rect x="${x}" y="${y}" width="${cols[0].width}" height="${rowHeight}" fill="${fill}" stroke="#c9cbd1" stroke-width="1"/>`;
+        const lines=wrapText(row.influencer,cols[0].width,baseFontSize);
+        const spacing=Math.floor(baseFontSize*1.25);
+        const textBlockHeight=lines.length*spacing;
+        const startY=y+(rowHeight-textBlockHeight)/2+spacing/2;
+        lines.forEach((l,idx)=>{svg+=`<text x="${x+cols[0].width/2}" y="${startY+idx*spacing}" class="influencer-text">${l}</text>`;});
+        x+=cols[0].width;
+
+        // col 1 – canale con icona vettoriale
+        svg+=`<rect x="${x}" y="${y}" width="${cols[1].width}" height="${rowHeight}" fill="${fill}" stroke="#c9cbd1" stroke-width="1"/>`;
+        const iconCenterX=x+cols[1].width/2;
+        const iconCenterY=y+rowHeight/2;
+        const iconSize=Math.floor(baseFontSize*1.5);
+        const scale=iconSize/24; // viewBox 24
+        let iconColor='#1d48b4';
+        switch(row.channelIcon){
+            case 'facebook': iconColor='#1877f2'; break;
+            case 'x':        iconColor='#000000'; break;
+            case 'linkedin': iconColor='#0077b5'; break;
+            case 'youtube':  iconColor='#ff0000'; break;
+        }
+        const pathData=ICON_PATHS[row.channelIcon]||ICON_PATHS.other;
+        svg+=`<g transform="translate(${iconCenterX-iconSize/2},${iconCenterY-iconSize/2}) scale(${scale})"><path d="${pathData}" fill="${iconColor}"/></g>`;
+        x+=cols[1].width;
+
+        // col 2 – post
+        svg+=`<rect x="${x}" y="${y}" width="${cols[2].width}" height="${rowHeight}" fill="${fill}" stroke="#c9cbd1" stroke-width="1"/>`;
+        svg+=`<text x="${x+cols[2].width/2}" y="${y+rowHeight/2}" class="cell-text">${row.posts}</text>`;
+        x+=cols[2].width;
+
+        // col 3 – followers
+        svg+=`<rect x="${x}" y="${y}" width="${cols[3].width}" height="${rowHeight}" fill="${fill}" stroke="#c9cbd1" stroke-width="1"/>`;
+        svg+=`<text x="${x+cols[3].width/2}" y="${y+rowHeight/2}" class="cell-text">${row.followers}</text>`;
+    });
+
+    svg+='</svg>';
+    generatedSVG=svg;
+    document.getElementById('svgContainer').innerHTML=svg; // anteprima
+}
+
+// -------------------------------------------------------------
+//  Download PNG – ora i loghi restano perché tutto è path
+// -------------------------------------------------------------
+function downloadPNG(){
+    if(!generatedSVG){showStatus('❌ Nessuna tabella da scaricare','error');return;}
+    const canvas=document.createElement('canvas');
+    const ctx=canvas.getContext('2d');
+    canvas.width=2400;canvas.height=3600; // 3× per alta definizione
+    ctx.scale(3,3);
+    ctx.fillStyle='white';
+    ctx.fillRect(0,0,800,1200);
+
+    const img=new Image();
+    const svgBlob=new Blob([generatedSVG],{type:'image/svg+xml;charset=utf-8'});
+    const url=URL.createObjectURL(svgBlob);
+
+    img.onload=()=>{
+        try{
+            ctx.drawImage(img,0,0,800,1200);
+            canvas.toBlob(blob=>{
+                const link=URL.createObjectURL(blob);
+                const a=document.createElement('a');
+                a.href=link;
+                a.download='tabella-influencer.png';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(link);
+                URL.revokeObjectURL(url);
+                showStatus('✅ Tabella PNG scaricata con successo!','success');
+            },'image/png',1.0);
+        }catch(err){console.error(err);showStatus('⚠️ Errore nel download - riprovare','error');URL.revokeObjectURL(url);}        
+    };
+    img.onerror=()=>{showStatus('⚠️ Errore nel caricamento - riprovare','error');URL.revokeObjectURL(url);};
+    img.src=url;
+}
+
+function generateNewTable(){
+    tableContainer.style.display='none';
+    currentData=null;
+    generatedSVG=null;
+    fileInput.value='';
+    document.getElementById('svgContainer').innerHTML='';
+    showStatus('🔄 Pronto per un nuovo file','success');
+}
+</script>
+</body>
+</html>
