@@ -192,14 +192,14 @@ function processFile(file){
 
 function processExcelData(data){
     return data.map(row=>{
-        const influencer = row.Labels ? row.Labels.split(',')[0].trim() : '';
+        const influencer = row.Labels ? row.Labels.replace(/\s*\(.*?\)/g, '').split(',')[0].trim() : '';
         let channel='';
         let channelIcon='other';
         if(row.Autori){
             const prefix=row.Autori.substring(0,2).toLowerCase();
             switch(prefix){
                 case 'fb': channel='Facebook'; channelIcon='facebook'; break;
-                case 'tw': channel='X'; channelIcon='x'; break; // Twitter è ora X 🆕
+                case 'tw': channel='X'; channelIcon='x'; break;
                 case 'li': channel='LinkedIn'; channelIcon='linkedin'; break;
                 case 'yt': channel='YouTube'; channelIcon='youtube'; break;
                 default: channel='Social'; channelIcon='other';
@@ -225,11 +225,12 @@ function generateSVGTable(data){
     const minRowHeight=60;
     const rowHeight=data.length>0?Math.max(Math.floor(availableHeight/data.length),minRowHeight):100;
 
+    // MODIFICA: Ridistribuita larghezza colonne
     const cols=[
         {title:'INFLUENCER',width:288},
-        {title:'CANALE',width:192},
+        {title:'CANALE',width:144},      // Ridotto da 192
         {title:'POST',width:144},
-        {title:'FOLLOWERS',width:176}
+        {title:'FOLLOWERS',width:224}    // Aumentato da 176 (176 + 48 = 224)
     ];
 
     const baseFontSize=Math.min(Math.floor(rowHeight/2.4),28);
