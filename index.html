@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generatore Tabelle Influencer – v2.5</title>
+    <title>Generatore Tabelle Influencer – v2.9 (Finale)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -117,7 +117,8 @@
             <div class="table-controls"><h2 style="color:#1d48b4;margin-bottom:20px;">📋 Anteprima Tabella</h2></div>
             <div class="svg-container" id="svgContainer"><!-- SVG generata dinamicamente --></div>
             <div class="download-section">
-                <button class="btn" id="downloadBtn" onclick="downloadPNG()">⬇️ Scarica Tabella PNG</button>
+                <button class="btn" id="downloadPngBtn" onclick="downloadPNG()">⬇️ Scarica Tabella PNG</button>
+                <button class="btn" id="downloadSvgBtn" onclick="downloadSVG()" style="background:linear-gradient(135deg,#28a745 0%,#34ce57 100%);">📄 Scarica Tabella SVG</button>
                 <button class="btn" style="background:linear-gradient(135deg,#ffd700 0%,#ffed4e 100%);color:#1d48b4;" onclick="generateNewTable()">🔄 Genera Nuova Tabella</button>
             </div>
         </div>
@@ -127,7 +128,7 @@
 
 <script>
 // -------------------------------------------------------------
-// Costanti per i loghi PNG esterni
+// Costanti
 // -------------------------------------------------------------
 const ICON_URLS = {
     instagram: 'https://fabiusai.github.io/TabellaInfluencer/ig.png',
@@ -135,12 +136,10 @@ const ICON_URLS = {
     x: 'https://fabiusai.github.io/TabellaInfluencer/x.png',
     linkedin: 'https://fabiusai.github.io/TabellaInfluencer/li.png'
 };
-// Icona di fallback in SVG per i canali non specificati
 const FALLBACK_ICON_SVG = `<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#1d48b4"/>`;
 
-
 // -------------------------------------------------------------
-//  Elementi DOM
+//  Elementi DOM e Variabili Globali
 // -------------------------------------------------------------
 let currentData = null;
 let generatedSVG = null;
@@ -148,106 +147,108 @@ let generatedSVG = null;
 const uploadArea       = document.getElementById('uploadArea');
 const fileInput        = document.getElementById('fileInput');
 const uploadBtn        = document.getElementById('uploadBtn');
-const downloadBtn      = document.getElementById('downloadBtn');
+const downloadPngBtn   = document.getElementById('downloadPngBtn');
+const downloadSvgBtn   = document.getElementById('downloadSvgBtn');
 const progressBar      = document.getElementById('progressBar');
 const progressFill     = document.getElementById('progressFill');
 const statusMessage    = document.getElementById('statusMessage');
 const tableContainer   = document.getElementById('tableContainer');
 
+// -------------------------------------------------------------
+// Gestione Eventi Upload
+// -------------------------------------------------------------
 uploadArea.addEventListener('click', () => fileInput.click());
-uploadArea.addEventListener('dragover', handleDragOver);
-uploadArea.addEventListener('dragleave', handleDragLeave);
-uploadArea.addEventListener('drop', handleDrop);
-fileInput.addEventListener('change', handleFileSelect);
+uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', (e) => { e.preventDefault(); uploadArea.classList.remove('dragover'); });
+uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+    if (e.dataTransfer.files.length > 0) {
+        processFile(e.dataTransfer.files[0]);
+    }
+});
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files[0]) {
+        processFile(e.target.files[0]);
+    }
+});
 
-function handleDragOver(e){e.preventDefault();uploadArea.classList.add('dragover');}
-function handleDragLeave(e){e.preventDefault();uploadArea.classList.remove('dragover');}
-function handleDrop(e){e.preventDefault();uploadArea.classList.remove('dragover');if(e.dataTransfer.files.length>0){processFile(e.dataTransfer.files[0]);}}
-function handleFileSelect(e){if(e.target.files[0]){processFile(e.target.files[0]);}}
+// -------------------------------------------------------------
+// Funzioni di Utility per l'Interfaccia
+// -------------------------------------------------------------
+function showStatus(message, type) { statusMessage.textContent = message; statusMessage.className = `status-message status-${type}`; statusMessage.style.display = 'block'; setTimeout(() => { statusMessage.style.display = 'none'; }, 5000); }
+function updateButton(btn, text, className) { btn.textContent = text; btn.className = `btn ${className}`; }
+function showProgress() { progressBar.style.display = 'block'; progressFill.style.width = '100%'; }
+function hideProgress() { progressBar.style.display = 'none'; progressFill.style.width = '0%'; }
 
-function showStatus(message,type){statusMessage.textContent=message;statusMessage.className=`status-message status-${type}`;statusMessage.style.display='block';setTimeout(()=>{statusMessage.style.display='none';},4000);}
-function updateButton(btn,text,className){btn.textContent=text;btn.className=`btn ${className}`;}
-function showProgress(){progressBar.style.display='block';progressFill.style.width='100%';}
-function hideProgress(){progressBar.style.display='none';progressFill.style.width='0%';}
-
-function processFile(file){
-    if(!file.name.match(/\.(xlsx|xls)$/)){showStatus('❌ Seleziona un file Excel (.xlsx o .xls)','error');return;}
-    updateButton(uploadBtn,'📤 Caricamento in corso...','loading');
+// -------------------------------------------------------------
+// Logica Principale di Elaborazione Dati
+// -------------------------------------------------------------
+function processFile(file) {
+    if (!file.name.match(/\.(xlsx|xls)$/)) { showStatus('❌ Seleziona un file Excel (.xlsx o .xls)', 'error'); return; }
+    updateButton(uploadBtn, '📤 Caricamento in corso...', 'loading');
     showProgress();
-    const reader=new FileReader();
-    reader.onload=function(e){
-        try{
-            const workbook=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
-            const worksheet=workbook.Sheets[workbook.SheetNames[0]];
-            const jsonData=XLSX.utils.sheet_to_json(worksheet);
-            if(jsonData.length===0) throw new Error('Il file Excel è vuoto');
-            currentData=processExcelData(jsonData);
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+            if (jsonData.length === 0) throw new Error('Il file Excel è vuoto');
+            currentData = processExcelData(jsonData);
             generateSVGTable(currentData);
-            updateButton(uploadBtn,'✅ File caricato!','success');
-            showStatus('✅ File Excel processato con successo!','success');
-            tableContainer.style.display='block';
-        }catch(err){console.error(err);showStatus(`❌ Errore: ${err.message}`,'error');updateButton(uploadBtn,'❌ Errore nel caricamento','error');}
-        finally{hideProgress();setTimeout(()=>updateButton(uploadBtn,'Seleziona File Excel',''),3000);}
+            updateButton(uploadBtn, '✅ File caricato!', 'success');
+            showStatus('✅ File Excel processato con successo!', 'success');
+            tableContainer.style.display = 'block';
+        } catch (err) { console.error(err); showStatus(`❌ Errore: ${err.message}`, 'error'); updateButton(uploadBtn, '❌ Errore nel caricamento', 'error'); }
+        finally { hideProgress(); setTimeout(() => updateButton(uploadBtn, 'Seleziona File Excel', ''), 3000); }
     };
     reader.readAsArrayBuffer(file);
 }
 
-// --- FUNZIONE MODIFICATA ---
-function capitalizeFirstLetter(str) {
-    if (!str) return '';
-    // Prende il primo carattere, lo rende maiuscolo, e lo unisce al resto della stringa originale.
-    return str.charAt(0).toUpperCase() + str.slice(1);
+function capitalizeFirstLetter(str) { if (!str) return ''; return str.charAt(0).toUpperCase() + str.slice(1); }
+function formatNumber(num) {
+    if (!num || num === 0) return '0';
+    const n = parseInt(num);
+    if (n >= 1e6) { const m = n / 1e6; return m >= 10 ? `${Math.floor(m)}M` : `${m.toFixed(2).replace('.00', '').replace('.', ',')}M`; }
+    if (n >= 1e3) { const k = n / 1e3; return k >= 10 ? `${Math.floor(k)}K` : `${k.toFixed(2).replace('.00', '').replace('.', ',')}K`; }
+    return n.toString();
 }
 
-function processExcelData(data){
-    return data.map(row=>{
-        const influencerRaw = row.Labels ? row.Labels.replace(/\s*\(.*?\)/g, '').split(',')[0].trim() : '';
-        // --- MODIFICA: Usa la nuova funzione per capitalizzare solo la prima lettera ---
+function processExcelData(data) {
+    return data.map(row => {
+        const influencerRaw = row.Labels ? String(row.Labels).replace(/\s*\(.*?\)/g, '').split(',')[0].trim() : '';
         const influencer = capitalizeFirstLetter(influencerRaw);
-        
-        let channel='';
-        let channelIcon='other';
-        if(row.Autori){
-            const prefix=row.Autori.substring(0,2).toLowerCase();
-            switch(prefix){
-                case 'fb': channel='Facebook'; channelIcon='facebook'; break;
-                case 'ig': channel='Instagram'; channelIcon='instagram'; break;
-                case 'tw': channel='X'; channelIcon='x'; break;
-                case 'li': channel='LinkedIn'; channelIcon='linkedin'; break;
-                default: channel='Social'; channelIcon='other';
+        let channel = '';
+        let channelIcon = 'other';
+        if (row.Autori) {
+            const prefix = String(row.Autori).substring(0, 2).toLowerCase();
+            switch (prefix) {
+                case 'fb': channel = 'Facebook'; channelIcon = 'facebook'; break;
+                case 'ig': channel = 'Instagram'; channelIcon = 'instagram'; break;
+                case 'tw': channel = 'X'; channelIcon = 'x'; break;
+                case 'li': channel = 'LinkedIn'; channelIcon = 'linkedin'; break;
+                default: channel = 'Social'; channelIcon = 'other';
             }
         }
         const posts = row.Totale || 0;
         const followers = row['Portata per risultato'] || 0;
-        return {influencer,channel,channelIcon,posts:formatNumber(posts),followers:formatNumber(followers)};
-    }).filter(r=>r.influencer);
+        return { influencer, channel, channelIcon, posts: formatNumber(posts), followers: formatNumber(followers) };
+    }).filter(r => r.influencer);
 }
 
-function formatNumber(num){if(!num||num===0)return'0';const n=parseInt(num);if(n>=1e6){const m=n/1e6;return m>=10?`${Math.floor(m)}M`:`${m.toFixed(2).replace('.00','')}M`;}else if(n>=1e3){const k=n/1e3;return k>=10?`${Math.floor(k)}K`:`${k.toFixed(2).replace('.00','')}K`;}
-return n.toString();}
-
 // -------------------------------------------------------------
-//  Generazione SVG della tabella
+// Generazione Tabella SVG
 // -------------------------------------------------------------
-function generateSVGTable(data){
-    const width=800;
-    const height=1200;
-    const headerHeight=80;
-    const availableHeight=height-headerHeight;
-    const minRowHeight=60;
-    const rowHeight=data.length>0?Math.max(Math.floor(availableHeight/data.length),minRowHeight):100;
+function generateSVGTable(data) {
+    const width = 800, height = 1200, headerHeight = 80, minRowHeight = 60;
+    const availableHeight = height - headerHeight;
+    const rowHeight = data.length > 0 ? Math.max(Math.floor(availableHeight / data.length), minRowHeight) : 100;
+    const cols = [ { title: 'INFLUENCER', width: 288 }, { title: 'CANALE', width: 144 }, { title: 'POST', width: 144 }, { title: 'FOLLOWERS', width: 224 }];
+    const baseFontSize = Math.min(Math.floor(rowHeight / 2.4), 28);
+    const headerFontSize = Math.min(Math.floor(headerHeight / 3), 28);
 
-    const cols=[
-        {title:'INFLUENCER',width:288},
-        {title:'CANALE',width:144},
-        {title:'POST',width:144},
-        {title:'FOLLOWERS',width:224}
-    ];
-
-    const baseFontSize=Math.min(Math.floor(rowHeight/2.4),28);
-    const headerFontSize=Math.min(Math.floor(headerHeight/3),28);
-
-    let svg=`<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
         <defs>
             <style>
                 .header-text{font-family:'Arial',sans-serif;font-size:${headerFontSize}px;font-weight:300;fill:#fff;text-anchor:middle;dominant-baseline:middle;}
@@ -255,123 +256,85 @@ function generateSVGTable(data){
                 .influencer-text{font-family:'Arial',sans-serif;font-size:${baseFontSize}px;font-weight:bold;fill:#1d48b4;text-anchor:middle;dominant-baseline:middle;}
             </style>
         </defs>`;
-
-    svg+=`<rect x="0" y="0" width="${width}" height="${height}" fill="none" stroke="#c9cbd1" stroke-width="2"/>`;
-
-    let x=0;
-    cols.forEach(col=>{
-        svg+=`<rect x="${x}" y="0" width="${col.width}" height="${headerHeight}" fill="#1d48b4" stroke="#ffffff" stroke-width="2"/>`;
-        svg+=`<text x="${x+col.width/2}" y="${headerHeight/2}" class="header-text">${col.title}</text>`;
-        x+=col.width;
+    svg += `<rect x="0" y="0" width="${width}" height="${height}" fill="white" stroke="#c9cbd1" stroke-width="2"/>`;
+    let x = 0;
+    cols.forEach(col => {
+        svg += `<rect x="${x}" y="0" width="${col.width}" height="${headerHeight}" fill="#1d48b4" stroke="#ffffff" stroke-width="2"/>`;
+        // --- MODIFICA FINALE: Aggiunto dy="2" per l'allineamento ottico verticale ---
+        svg += `<text x="${x + col.width / 2}" y="${headerHeight / 2}" dy="2" class="header-text">${col.title}</text>`;
+        x += col.width;
     });
 
-    const wrapText=(text,maxWidth,fontSize)=>{
-        const words=text.split(' ');
-        const lines=[];let current='';
-        const charWidth=fontSize*0.55;
-        const maxChars=Math.floor((maxWidth-30)/charWidth);
-        words.forEach(word=>{
-            if((current+' '+word).trim().length<=maxChars){current+=(current?' ':'')+word;}else{if(current)lines.push(current);current=word;}
-        });
-        if(current)lines.push(current);
-        return lines;
+    const wrapText = (text, maxWidth, fontSize) => {
+        const words = text.split(' '); const lines = []; let current = ''; const charWidth = fontSize * 0.55; const maxChars = Math.floor((maxWidth - 30) / charWidth);
+        words.forEach(word => { if ((current + ' ' + word).trim().length <= maxChars) { current += (current ? ' ' : '') + word; } else { if (current) lines.push(current); current = word; } });
+        if (current) lines.push(current); return lines;
     };
 
-    data.forEach((row,i)=>{
-        const y=headerHeight+i*rowHeight;
-        const fill=i%2===0?'#ffffff':'#f8f9fa';
-        x=0;
+    data.forEach((row, i) => {
+        const y = headerHeight + i * rowHeight; const fill = i % 2 === 0 ? '#ffffff' : '#f8f9fa'; x = 0;
+        svg += `<rect x="${x}" y="${y}" width="${cols[0].width}" height="${rowHeight}" fill="${fill}" stroke="#c9cbd1" stroke-width="1"/>`;
+        const lines = wrapText(row.influencer, cols[0].width, baseFontSize); const spacing = Math.floor(baseFontSize * 1.25); const textBlockHeight = lines.length * spacing; const startY = y + (rowHeight - textBlockHeight) / 2 + spacing / 2;
+        lines.forEach((l, idx) => { svg += `<text x="${x + cols[0].width / 2}" y="${startY + idx * spacing}" class="influencer-text">${l}</text>`; });
+        x += cols[0].width;
 
-        svg+=`<rect x="${x}" y="${y}" width="${cols[0].width}" height="${rowHeight}" fill="${fill}" stroke="#c9cbd1" stroke-width="1"/>`;
-        const lines=wrapText(row.influencer,cols[0].width,baseFontSize);
-        const spacing=Math.floor(baseFontSize*1.25);
-        const textBlockHeight=lines.length*spacing;
-        const startY=y+(rowHeight-textBlockHeight)/2+spacing/2;
-        lines.forEach((l,idx)=>{svg+=`<text x="${x+cols[0].width/2}" y="${startY+idx*spacing}" class="influencer-text">${l}</text>`;});
-        x+=cols[0].width;
-
-        svg+=`<rect x="${x}" y="${y}" width="${cols[1].width}" height="${rowHeight}" fill="${fill}" stroke="#c9cbd1" stroke-width="1"/>`;
-        const iconCenterX=x+cols[1].width/2;
-        const iconCenterY=y+rowHeight/2;
-        const iconSize=Math.floor(baseFontSize*1.8); 
-        
+        svg += `<rect x="${x}" y="${y}" width="${cols[1].width}" height="${rowHeight}" fill="${fill}" stroke="#c9cbd1" stroke-width="1"/>`;
+        const iconCenterX = x + cols[1].width / 2; const iconCenterY = y + rowHeight / 2; const iconSize = Math.floor(baseFontSize * 1.8);
         const iconUrl = ICON_URLS[row.channelIcon];
-        if (iconUrl) {
-            svg += `<image href="${iconUrl}" x="${iconCenterX - iconSize/2}" y="${iconCenterY - iconSize/2}" height="${iconSize}" width="${iconSize}"/>`;
-        } else {
-            const scale=iconSize/24;
-            svg+=`<g transform="translate(${iconCenterX-iconSize/2},${iconCenterY-iconSize/2}) scale(${scale})">${FALLBACK_ICON_SVG}</g>`;
-        }
-        x+=cols[1].width;
+        if (iconUrl) { svg += `<image href="${iconUrl}" x="${iconCenterX - iconSize / 2}" y="${iconCenterY - iconSize / 2}" height="${iconSize}" width="${iconSize}"/>`; }
+        else { const scale = iconSize / 24; svg += `<g transform="translate(${iconCenterX - iconSize / 2},${iconCenterY - iconSize / 2}) scale(${scale})">${FALLBACK_ICON_SVG}</g>`; }
+        x += cols[1].width;
 
-        svg+=`<rect x="${x}" y="${y}" width="${cols[2].width}" height="${rowHeight}" fill="${fill}" stroke="#c9cbd1" stroke-width="1"/>`;
-        svg+=`<text x="${x+cols[2].width/2}" y="${y+rowHeight/2}" class="cell-text">${row.posts}</text>`;
-        x+=cols[2].width;
-
-        svg+=`<rect x="${x}" y="${y}" width="${cols[3].width}" height="${rowHeight}" fill="${fill}" stroke="#c9cbd1" stroke-width="1"/>`;
-        svg+=`<text x="${x+cols[3].width/2}" y="${y+rowHeight/2}" class="cell-text">${row.followers}</text>`;
+        svg += `<rect x="${x}" y="${y}" width="${cols[2].width}" height="${rowHeight}" fill="${fill}" stroke="#c9cbd1" stroke-width="1"/><text x="${x + cols[2].width / 2}" y="${y + rowHeight / 2}" class="cell-text">${row.posts}</text>`; x += cols[2].width;
+        svg += `<rect x="${x}" y="${y}" width="${cols[3].width}" height="${rowHeight}" fill="${fill}" stroke="#c9cbd1" stroke-width="1"/><text x="${x + cols[3].width / 2}" y="${y + rowHeight / 2}" class="cell-text">${row.followers}</text>`;
     });
 
-    svg+='</svg>';
-    generatedSVG=svg;
-    document.getElementById('svgContainer').innerHTML=svg;
+    svg += '</svg>';
+    generatedSVG = svg;
+    document.getElementById('svgContainer').innerHTML = svg;
 }
 
 // -------------------------------------------------------------
-//  Download PNG - con pre-caricamento delle immagini esterne
+// Logica di Download
 // -------------------------------------------------------------
-async function downloadPNG() {
-    if (!generatedSVG) {
-        showStatus('❌ Nessuna tabella da scaricare', 'error');
-        return;
+async function createEmbeddableSVG() {
+    const urlsToFetch = [...new Set(currentData.map(row => ICON_URLS[row.channelIcon]).filter(url => url))];
+    const toDataURL = async (url) => {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Fallito il caricamento del logo: ${url}`);
+        const blob = await response.blob();
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    };
+    const dataUrls = await Promise.all(urlsToFetch.map(url => toDataURL(url)));
+    const urlMap = urlsToFetch.reduce((map, url, index) => { map[url] = dataUrls[index]; return map; }, {});
+    let svgWithDataUrls = generatedSVG;
+    for (const [originalUrl, dataUrl] of Object.entries(urlMap)) {
+        svgWithDataUrls = svgWithDataUrls.replace(new RegExp(originalUrl, 'g'), dataUrl);
     }
-    
-    downloadBtn.disabled = true;
-    updateButton(downloadBtn, '⏳ Preparo il download...', 'loading');
-    showStatus('⏳ Sto caricando i loghi, attendere prego...', 'info');
+    return svgWithDataUrls;
+}
+
+async function downloadPNG() {
+    if (!generatedSVG) { showStatus('❌ Nessuna tabella da scaricare', 'error'); return; }
+    downloadPngBtn.disabled = true;
+    updateButton(downloadPngBtn, '⏳ Preparo il PNG...', 'loading');
+    showStatus('⏳ Sto caricando i loghi per il PNG...', 'info');
 
     try {
-        const urlsToFetch = [...new Set(
-            currentData
-            .map(row => ICON_URLS[row.channelIcon])
-            .filter(url => url)
-        )];
-
-        const toDataURL = async (url) => {
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`Failed to fetch ${url}`);
-            const blob = await response.blob();
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-        };
-
-        const dataUrlPromises = urlsToFetch.map(url => toDataURL(url));
-        const dataUrls = await Promise.all(dataUrlPromises);
-        
-        const urlMap = urlsToFetch.reduce((map, url, index) => {
-            map[url] = dataUrls[index];
-            return map;
-        }, {});
-
-        let svgWithDataUrls = generatedSVG;
-        for (const [originalUrl, dataUrl] of Object.entries(urlMap)) {
-            svgWithDataUrls = svgWithDataUrls.replace(new RegExp(originalUrl, 'g'), dataUrl);
-        }
-
+        const embeddableSVG = await createEmbeddableSVG();
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-        canvas.width = 2400;
-        canvas.height = 3600;
+        canvas.width = 2400; canvas.height = 3600;
         ctx.scale(3, 3);
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, 800, 1200);
+        ctx.fillStyle = 'white'; ctx.fillRect(0, 0, 800, 1200);
 
         const img = new Image();
-        const svgBlob = new Blob([svgWithDataUrls], { type: 'image/svg+xml;charset=utf-8' });
+        const svgBlob = new Blob([embeddableSVG], { type: 'image/svg+xml;charset=utf-8' });
         const url = URL.createObjectURL(svgBlob);
 
         img.onload = () => {
@@ -379,37 +342,43 @@ async function downloadPNG() {
             canvas.toBlob(blob => {
                 const link = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.href = link;
-                a.download = 'tabella-influencer.png';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(link);
-                URL.revokeObjectURL(url);
-                showStatus('✅ Tabella PNG scaricata con successo!', 'success');
-                updateButton(downloadBtn, '⬇️ Scarica Tabella PNG', '');
-                downloadBtn.disabled = false;
+                a.href = link; a.download = 'tabella-influencer.png';
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                URL.revokeObjectURL(link); URL.revokeObjectURL(url);
+                showStatus('✅ Tabella PNG scaricata!', 'success');
             }, 'image/png', 1.0);
         };
-        img.onerror = () => { throw new Error('Errore nel caricamento dell\'immagine SVG sul canvas.'); };
+        img.onerror = () => { throw new Error('Errore nel caricamento dell\'SVG sul canvas.'); };
         img.src = url;
 
-    } catch (err) {
-        console.error(err);
-        showStatus(`⚠️ Errore nel download: ${err.message}`, 'error');
-        updateButton(downloadBtn, '⬇️ Scarica Tabella PNG', '');
-        downloadBtn.disabled = false;
-    }
+    } catch (err) { console.error(err); showStatus(`⚠️ Errore download PNG: ${err.message}`, 'error'); }
+    finally { updateButton(downloadPngBtn, '⬇️ Scarica Tabella PNG', ''); downloadPngBtn.disabled = false; }
 }
 
+async function downloadSVG() {
+    if (!generatedSVG) { showStatus('❌ Nessuna tabella da scaricare', 'error'); return; }
+    downloadSvgBtn.disabled = true;
+    updateButton(downloadSvgBtn, '⏳ Preparo l\'SVG...', 'loading');
+    showStatus('⏳ Sto caricando i loghi per l\'SVG...', 'info');
 
-function generateNewTable(){
-    tableContainer.style.display='none';
-    currentData=null;
-    generatedSVG=null;
-    fileInput.value='';
-    document.getElementById('svgContainer').innerHTML='';
-    showStatus('🔄 Pronto per un nuovo file','success');
+    try {
+        const embeddableSVG = await createEmbeddableSVG();
+        const svgBlob = new Blob([embeddableSVG], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'tabella-influencer.svg';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showStatus('✅ Tabella SVG (autonoma) scaricata!', 'success');
+    } catch (err) { console.error(err); showStatus(`⚠️ Errore download SVG: ${err.message}`, 'error'); }
+    finally { updateButton(downloadSvgBtn, '📄 Scarica Tabella SVG', 'success'); downloadSvgBtn.disabled = false; }
+}
+
+function generateNewTable() {
+    tableContainer.style.display = 'none';
+    currentData = null; generatedSVG = null;
+    fileInput.value = ''; document.getElementById('svgContainer').innerHTML = '';
+    showStatus('🔄 Pronto per un nuovo file', 'success');
 }
 </script>
 </body>
